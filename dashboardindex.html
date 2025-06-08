@@ -1,0 +1,268 @@
+
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>داشبورد هوشمند TELLAND</title>
+  <style>
+    body {
+      font-family: 'Vazirmatn', sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      color: white;
+      padding: 2rem;
+    }
+
+    .login-box, .dashboard {
+      max-width: 500px;
+      margin: 2rem auto;
+      background: rgba(255,255,255,0.07);
+      padding: 2rem;
+      border-radius: 15px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    }
+
+    input, button, textarea {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+    }
+
+    button {
+      background: #4caf50;
+      color: white;
+      cursor: pointer;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .customer-item {
+      background: rgba(255,255,255,0.08);
+      padding: 1rem;
+      border-radius: 10px;
+      margin: 1rem 0;
+    }
+
+    .summary {
+      margin: 2rem auto;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 1rem; }
+    }
+  </style>
+</head>
+<body onload="checkAuth()">
+
+<div class="login-box" id="loginBox">
+  <h2 style="text-align:center;">ورود به سیستم</h2>
+  <input type="password" id="password" placeholder="رمز ورود">
+  <button onclick="login()">ورود</button>
+</div>
+
+<div class="dashboard hidden" id="dashboard">
+  <h2 style="text-align:center;">داشبورد هوشمند مشتریان TELLAND</h2>
+
+  <form id="customerForm">
+    <input type="text" id="name" placeholder="نام مشتری" required>
+    <input type="text" id="phone" placeholder="شماره تماس" required>
+    <input type="text" id="price" placeholder="مبلغ خرید" required>
+    <textarea id="note" placeholder="توضیحات یا آدرس"></textarea>
+    <button type="submit">افزودن مشتری</button>
+  </form>
+
+  
+<div style="text-align:center; margin: 1rem auto;">
+  <input type="text" id="searchInput" placeholder="🔍 جستجو بر اساس نام یا شماره" oninput="searchCustomers()" style="padding: 0.6rem; border-radius: 10px; width: 80%;">
+</div>
+<div class="summary">
+    <strong>تعداد کل مشتری‌ها: <span id="totalCount">0</span></strong><br>
+    <strong>مجموع مبالغ: <span id="totalPrice">0</span> تومان</strong><br><br>
+    <button onclick="exportCSV()">📥 خروجی اکسل</button> <button onclick="syncToCloud()">☁️ ذخیره ابری</button>
+    <button onclick="window.print()">🖨️ چاپ لیست</button>
+  </div>
+
+  
+<div id="customerList"></div>
+
+<div class="summary">
+  <h3>📘 لاگ فعالیت</h3>
+  <ul id="activityLog" style="text-align:right; list-style:none; padding:0;"></ul>
+</div>
+
+</div>
+
+<script>
+  const correctPassword = "telland2025";  // رمز عبور ساده برای ورود
+
+  function login() {
+    const inputPass = document.getElementById("password").value;
+    if (inputPass === correctPassword) {
+      document.getElementById("loginBox").classList.add("hidden");
+      document.getElementById("dashboard").classList.remove("hidden");
+      renderCustomers();
+    } else {
+      alert("رمز نادرست است!");
+    }
+  }
+
+  const form = document.getElementById("customerForm");
+  const customerList = document.getElementById("customerList");
+  let customers = JSON.parse(localStorage.getItem("customers") || "[]");
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    const name = document.getElementById("name").value.trim();
+    const phone = document.getElementById("phone").value.trim();
+    const price = parseInt(document.getElementById("price").value.trim());
+    const note = document.getElementById("note").value.trim();
+    if (!name || !phone || !price) return;
+
+    customers.push({ name, phone, price, note });
+    localStorage.setItem("customers", JSON.stringify(customers));
+    renderCustomers();
+    form.reset();
+  });
+
+  function renderCustomers() {
+    customerList.innerHTML = "";
+    let total = 0;
+    customers.forEach((c, i) => {
+      const div = document.createElement("div");
+      div.className = "customer-item";
+      total += parseInt(c.price);
+      div.innerHTML = `
+        <div><strong>#${i + 1} 👤 <span contenteditable="true" oninput="editCustomer(${i}, 'name', this.innerText)">${c.name}</span></strong></div>
+        <div>📞 <span contenteditable="true" oninput="editCustomer(${i}, 'phone', this.innerText)">${c.phone}</span></div>
+        <div>💰 <span contenteditable="true" oninput="editCustomer(${i}, 'price', this.innerText)">${c.price}</span> تومان</div>
+        <div>📝 <span contenteditable="true" oninput="editCustomer(${i}, 'note', this.innerText)">${c.note}</span></div>
+        <button onclick="deleteCustomer(${i})" style="margin-top: 0.5rem; background:#e53935; color:white;">❌ حذف</button>
+      `;
+      customerList.appendChild(div);
+    });
+
+    document.getElementById("totalCount").innerText = customers.length;
+    document.getElementById("totalPrice").innerText = total;
+  }
+
+  function editCustomer(index, field, value) {
+    customers[index][field] = value;
+    localStorage.setItem("customers", JSON.stringify(customers));
+    renderCustomers();
+  }
+
+  function deleteCustomer(index) {
+    customers.splice(index, 1);
+    localStorage.setItem("customers", JSON.stringify(customers));
+    renderCustomers();
+  }
+
+  function exportCSV() {
+    let csv = "ردیف,نام,شماره تماس,مبلغ,یادداشت\n";
+    customers.forEach((c, i) => {
+      csv += `${i + 1},${c.name},${c.phone},${c.price},${c.note}\n`;
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "customers.csv";
+    a.click();
+  }
+
+function searchCustomers() {
+  const query = document.getElementById("searchInput").value.toLowerCase();
+  const items = document.querySelectorAll(".customer-item");
+  items.forEach(item => {
+    item.style.display = item.innerText.toLowerCase().includes(query) ? "block" : "none";
+  });
+}
+
+function logActivity(text) {
+  const time = new Date().toLocaleString("fa-IR");
+  const logItem = document.createElement("li");
+  logItem.innerText = `[${time}] ${text}`;
+  document.getElementById("activityLog").prepend(logItem);
+}
+
+// ذخیره مشتری
+form.addEventListener("submit", function (e) {
+  e.preventDefault();
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const price = parseInt(document.getElementById("price").value.trim());
+  const note = document.getElementById("note").value.trim();
+  if (!name || !phone || !price) return;
+
+  let category = "🟢 معمولی";
+  if (price > 5000000) category = "🔴 ویژه";
+  else if (price > 2000000) category = "🟡 خوب";
+
+  customers.push({ name, phone, price, note, category });
+  localStorage.setItem("customers", JSON.stringify(customers));
+  renderCustomers();
+  logActivity(`مشتری جدید اضافه شد: ${name}`);
+  form.reset();
+});
+
+// بازسازی رندر با دسته‌بندی و لاگ
+function renderCustomers() {
+  customerList.innerHTML = "";
+  let total = 0;
+  customers.forEach((c, i) => {
+    const div = document.createElement("div");
+    div.className = "customer-item";
+    total += parseInt(c.price);
+    div.innerHTML = `
+      <div><strong>#${i + 1} 👤 <span contenteditable="true" oninput="editCustomer(${i}, 'name', this.innerText)">${c.name}</span></strong> (${c.category || '🟢 معمولی'})</div>
+      <div>📞 <span contenteditable="true" oninput="editCustomer(${i}, 'phone', this.innerText)">${c.phone}</span></div>
+      <div>💰 <span contenteditable="true" oninput="editCustomer(${i}, 'price', this.innerText)">${c.price}</span> تومان</div>
+      <div>📝 <span contenteditable="true" oninput="editCustomer(${i}, 'note', this.innerText)">${c.note}</span></div>
+      <button onclick="deleteCustomer(${i})" style="margin-top: 0.5rem; background:#e53935; color:white;">❌ حذف</button>
+    `;
+    customerList.appendChild(div);
+  });
+
+  document.getElementById("totalCount").innerText = customers.length;
+  document.getElementById("totalPrice").innerText = total;
+}
+
+function editCustomer(index, field, value) {
+  customers[index][field] = value;
+  localStorage.setItem("customers", JSON.stringify(customers));
+  logActivity(`ویرایش مشتری: فیلد ${field} تغییر یافت برای ${customers[index].name}`);
+}
+
+function deleteCustomer(index) {
+  const name = customers[index].name;
+  customers.splice(index, 1);
+  localStorage.setItem("customers", JSON.stringify(customers));
+  logActivity(`مشتری حذف شد: ${name}`);
+  renderCustomers();
+}
+
+// شبیه‌سازی ذخیره ابری (در کنسول)
+function syncToCloud() {
+  console.log("📡 در حال آپلود اطلاعات به فضای ابری...");
+  console.log(JSON.stringify(customers, null, 2));
+  alert("ذخیره ابری انجام شد (شبیه‌سازی)");
+}
+
+function checkAuth() {
+  const access = localStorage.getItem("auth");
+  if (access !== "granted") {
+    alert("⛔ دسترسی غیرمجاز! ابتدا وارد شوید.");
+    window.location.href = "login_TELLAND_secure.html";
+  }
+}
+</script>
+
+</body>
+</html>
